@@ -5,7 +5,7 @@
 <style>
 :root{--bg:#f3f5f7;--panel:#fff;--ink:#14212b;--mute:#5d6b76;--line:#d5dce2;--ok:#1f7a5a;--bad:#b3261e;--warn:#a86400;--acc:#0b5cab}
 @media(prefers-color-scheme:dark){:root{--bg:#0e161c;--panel:#16212a;--ink:#e6edf2;--mute:#8fa1ae;--line:#26343f;--ok:#4cc39b;--bad:#ff6b61;--warn:#e8a63a;--acc:#6db3f2}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif}
 header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap;gap:8px}
 h1{font-size:18px;margin:0}main{padding:20px;max-width:1200px;margin:auto}
 .banner{padding:8px 14px;border-radius:4px;font-size:13px;margin-bottom:16px;background:color-mix(in srgb,var(--warn) 18%,transparent);border:1px solid var(--warn)}
@@ -33,7 +33,7 @@ button:focus-visible,input:focus-visible,tr:focus-visible{outline:2px solid var(
 </main>
 <script type="module">
 // ---- 1. PASTE YOUR FIREBASE WEB CONFIG (Project settings > General > Your apps) ----
-const cfg={apiKey:"",authDomain:"sdn-project-94cd0.firebaseapp.com",databaseURL:"https://sdn-project-94cd0-default-rtdb.firebaseio.com",projectId:"sdn-project-94cd0",appId:""}; // fill apiKey and appId
+const cfg={apiKey:"AIzaSyD9EiuATooKrc6hFShoeAQdy8CyhRmOGlk",authDomain:"sdn-project-94cd0.firebaseapp.com",databaseURL:"https://sdn-project-94cd0-default-rtdb.firebaseio.com",projectId:"sdn-project-94cd0",appId:"1:212820257224:web:fcc00a6df434050290f8fd"};
 const live=!!(cfg.databaseURL&&cfg.apiKey&&cfg.appId), $=id=>document.getElementById(id);
 let items=[],sel=null,db,auth,fs,user;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
