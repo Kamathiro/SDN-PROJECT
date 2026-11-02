@@ -17,7 +17,7 @@ h1{font-size:18px;margin:0}main{padding:20px;max-width:1200px;margin:auto}
 tr[data-i]{cursor:pointer}tr[data-i]:hover,tr.sel{background:color-mix(in srgb,var(--acc) 10%,transparent)}
 .attack{color:var(--bad);font-weight:600}.benign{color:var(--ok)}
 button,input{font:inherit;padding:7px 12px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
-button{cursor:pointer;background:var(--acc);color:#fff;border:0}button.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button{cursor:pointer;background:var(--acc);color:#fff;border:0}button:disabled{opacity:.4;cursor:not-allowed}button.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
 button:focus-visible,input:focus-visible,tr:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .bar{height:10px;background:var(--acc);border-radius:2px}.neg{background:var(--bad)}.row{display:grid;grid-template-columns:130px 1fr 54px;gap:8px;align-items:center;font-size:13px;margin:6px 0}
 #login{max-width:340px;margin:12vh auto;display:grid;gap:10px}.mute{color:var(--mute);font-size:13px}svg{width:100%;height:80px}
@@ -29,7 +29,7 @@ button:focus-visible,input:focus-visible,tr:focus-visible{outline:2px solid var(
 <div class="kpis"><div class="k"><b id="k1">0</b><span>Flows scored (this session)</span></div><div class="k"><b id="k2">0</b><span>Flagged as attack</span></div><div class="k"><b id="k3">0</b><span>Mitigated</span></div><div class="k"><b id="k4">–</b><span>Mean decision latency (ms)</span></div></div>
 <div class="grid"><div class="p"><h2>Attack probability, last 60 flows</h2><svg id="spark" viewBox="0 0 600 80" preserveAspectRatio="none" role="img" aria-label="Attack probability trend"></svg>
 <h2 style="margin-top:14px">Detections</h2><div class="scroll"><table><thead><tr><th>Time</th><th>Source IP</th><th>Label</th><th>P(attack)</th><th>Action</th><th>Latency</th></tr></thead><tbody id="rows"></tbody></table></div></div>
-<div class="p"><h2>Why this flow? (SHAP)</h2><div id="shap" class="mute">Select a detection.</div><h2 style="margin-top:18px">Manual mitigation</h2><div class="mute" id="sel">No flow selected.</div><p><button id="blk" disabled>Block source</button> <button class="alt" id="unb" disabled>Unblock</button></p><div class="mute" id="msg"></div></div></div>
+<div class="p"><h2>Why this flow? (SHAP)</h2><div id="shap" class="mute">Select a detection.</div><h2 style="margin-top:18px">Manual mitigation</h2><div class="mute" id="sel">No flow selected. Click a row in the Detections table to enable these buttons.</div><p><button id="blk" disabled>Block source</button> <button class="alt" id="unb" disabled>Unblock</button></p><div class="mute" id="msg"></div></div></div>
 </main>
 <script type="module">
 // ---- 1. PASTE YOUR FIREBASE WEB CONFIG (Project settings > General > Your apps) ----
