@@ -26,22 +26,25 @@ button:focus-visible,input:focus-visible,tr:focus-visible{outline:2px solid var(
 <div id="login" hidden><h2>Sign in</h2><input id="em" type="email" placeholder="Email" autocomplete="username"><input id="pw" type="password" placeholder="Password" autocomplete="current-password"><button id="go">Sign in</button><div class="mute" id="err" role="alert"></div></div>
 <main id="app" hidden>
 <div class="banner" id="demo" hidden>Demo mode: records below are synthetic and are not experimental results. Add your Firebase config to show live data.</div>
-<div class="kpis"><div class="k"><b id="k1">0</b><span>Flows scored (this session)</span></div><div class="k"><b id="k2">0</b><span>Flagged as attack</span></div><div class="k"><b id="k3">0</b><span>Mitigated</span></div><div class="k"><b id="k4">–</b><span>Mean decision latency (ms)</span></div></div>
+<div class="kpis"><div class="k"><b id="k1">0</b><span>Flows scored (this session)</span></div><div class="k"><b id="k2">0</b><span>Flagged as attack</span></div><div class="k"><b id="k3">0</b><span>Mitigated</span></div><div class="k"><b id="k4">–</b><span>Mean scoring time per flow (ms)</span></div></div>
 <div class="grid"><div class="p"><h2>Attack probability, last 60 flows</h2><svg id="spark" viewBox="0 0 600 80" preserveAspectRatio="none" role="img" aria-label="Attack probability trend"></svg>
 <h2 style="margin-top:14px">Detections</h2><div class="scroll"><table><thead><tr><th>Time</th><th>Source IP</th><th>Label</th><th>P(attack)</th><th>Action</th><th>Latency</th></tr></thead><tbody id="rows"></tbody></table></div></div>
-<div class="p"><h2>Why this flow? (SHAP)</h2><div id="shap" class="mute">Select a detection.</div><h2 style="margin-top:18px">Manual mitigation</h2><div class="mute" id="sel">No flow selected. Click a row in the Detections table to enable these buttons.</div><p><button id="blk" disabled>Block source</button> <button class="alt" id="unb" disabled>Unblock</button></p><div class="mute" id="msg"></div></div></div>
+<div class="p"><h2>Why this flow? (SHAP)</h2><div id="shap" class="mute">Select a detection.</div><h2 style="margin-top:18px">Manual mitigation</h2><div class="mute" id="sel">No flow selected. Click a row in the Detections table to enable these buttons.</div><p><button id="blk" disabled>Block source</button> <button class="alt" id="unb" disabled>Unblock</button></p><div class="mute" id="msg"></div>
+<div id="rp" hidden><h2 style="margin-top:18px">Replay a dataset in the browser</h2><div class="mute">Scores each CSV row with your XGBoost model and sends it to the database. This replays recorded flows. It is not live SDN traffic, and blocking is simulated.</div>
+<p><label class="mute">Model (model.json)<br><input type="file" id="rm" accept=".json"></label></p><p><label class="mute">Flows (CSV, first 5 MB)<br><input type="file" id="rc" accept=".csv"></label></p>
+<p><label class="mute">Rows per second (0.2 to 10) <input id="rr" type="number" value="2" min="0.2" max="10" step="0.2" style="width:70px"></label></p><p><button id="rgo">Start replay</button> <button class="alt" id="rst">Stop</button></p><div class="mute" id="rmsg" role="status"></div></div></div></div>
 </main>
 <script type="module">
 // ---- 1. PASTE YOUR FIREBASE WEB CONFIG (Project settings > General > Your apps) ----
 const cfg={apiKey:"AIzaSyD9EiuATooKrc6hFShoeAQdy8CyhRmOGlk",authDomain:"sdn-project-94cd0.firebaseapp.com",databaseURL:"https://sdn-project-94cd0-default-rtdb.firebaseio.com",projectId:"sdn-project-94cd0",appId:"1:212820257224:web:fcc00a6df434050290f8fd"};
 const live=!!(cfg.databaseURL&&cfg.apiKey&&cfg.appId), $=id=>document.getElementById(id);
-let items=[],sel=null,db,auth,fs,user;
+let items=[],sel=null,db,auth,fs,user;const blocked=new Set();
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function render(){
  const a=items.filter(x=>x.label==="attack"),lat=items.map(x=>x.latency_ms).filter(Number.isFinite);
  $("k1").textContent=items.length;$("k2").textContent=a.length;$("k3").textContent=items.filter(x=>x.action&&x.action!=="none").length;
  $("k4").textContent=lat.length?(lat.reduce((s,v)=>s+v,0)/lat.length).toFixed(1):"–";
- $("rows").innerHTML=items.slice(0,50).map((x,i)=>`<tr data-i="${i}" tabindex="0" class="${sel===x?'sel':''}"><td>${esc(x.time)}</td><td>${esc(x.src_ip)}</td><td class="${x.label}">${esc(x.label)}</td><td>${(+x.prob).toFixed(3)}</td><td>${esc(x.action||"none")}</td><td>${Number.isFinite(x.latency_ms)?x.latency_ms.toFixed(0)+" ms":"–"}</td></tr>`).join("");
+ $("rows").innerHTML=items.slice(0,50).map((x,i)=>`<tr data-i="${i}" tabindex="0" class="${sel===x?'sel':''}"><td>${esc(x.time)}</td><td>${esc(x.src_ip)}</td><td class="${x.label}">${esc(x.label)}</td><td>${(+x.prob).toFixed(3)}</td><td>${esc(x.action||"none")}</td><td>${Number.isFinite(x.latency_ms)?x.latency_ms.toFixed(2)+" ms":"–"}</td></tr>`).join("");
  const pts=items.slice(0,60).reverse().map((x,i,a)=>`${(i/Math.max(a.length-1,1))*600},${78-x.prob*74}`).join(" ");
  $("spark").innerHTML=`<polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="2"/><line x1="0" x2="600" y1="39" y2="39" stroke="var(--line)" stroke-dasharray="4"/>`;
 }
@@ -54,7 +57,7 @@ async function cmd(action){
  if(!sel)return;$("msg").textContent="Sending...";
  if(!live){$("msg").textContent="Demo mode: command not sent.";return}
  try{await fs.push(fs.ref(db,"commands"),{action,src_ip:sel.src_ip,by:user.email,ts:fs.serverTimestamp(),done:false})}catch(e){$("msg").textContent="Rejected: "+e.code;return}
- $("msg").textContent=`${action} request queued for ${sel.src_ip}. The controller applies it and marks it done.`;}
+ if(action==="block")blocked.add(sel.src_ip);else blocked.delete(sel.src_ip);$("msg").textContent=`${action} request queued for ${sel.src_ip}. The controller applies it and marks it done.`;}
 $("blk").onclick=()=>cmd("block");$("unb").onclick=()=>cmd("unblock");
 function show(){$("login").hidden=true;$("app").hidden=false;$("out").hidden=!live}
 if(!live){ // synthetic demo data, clearly labelled
@@ -71,10 +74,29 @@ if(!live){ // synthetic demo data, clearly labelled
  let offs=[];
  Au.onAuthStateChanged(auth,u=>{user=u;offs.forEach(f=>f());offs=[];
   if(!u){$("app").hidden=true;$("login").hidden=false;return}
-  show();$("mode").textContent="live";
+  show();$("rp").hidden=false;$("mode").textContent="live";
   offs.push(F.onValue(F.ref(db,"status/current"),s=>{const v=s.val();if(v)$("mode").textContent=`live · ${v.mode} · model ${v.model_version}${v.adwin_drift?" · drift detected":""}`}));
   offs.push(F.onValue(F.query(F.ref(db,"detections"),F.orderByKey(),F.limitToLast(200)),s=>{
    const a=[];s.forEach(c=>{const x=c.val();x.time=x.ts?new Date(x.ts).toLocaleTimeString():"";a.push(x)});items=a.reverse();render()},
    e=>{$("app").prepend(Object.assign(document.createElement("div"),{className:"banner",textContent:"Read denied. Add your UID under admins/. "+e.code}))}));});
+function parseModel(j){const L=j.learner;if(!/binary:logistic/.test(L.objective.name))throw new Error("Only binary:logistic models are supported.");
+ let bs=parseFloat(String(L.learner_model_param.base_score).replace(/[\[\]]/g,""));
+ return{names:L.feature_names||[],base:Math.log(bs/(1-bs)),trees:L.gradient_booster.model.trees.map(t=>({l:t.left_children,r:t.right_children,i:t.split_indices,c:t.split_conditions,d:t.default_left}))}}
+function predict(m,x){let s=m.base;for(const t of m.trees){let n=0;while(t.l[n]!==-1){const v=x[t.i[n]];n=(v===undefined||Number.isNaN(v))?(t.d[n]?t.l[n]:t.r[n]):(Math.fround(v)<Math.fround(t.c[n])?t.l[n]:t.r[n])}s+=t.c[n]}return 1/(1+Math.exp(-s))}
+
+ let timer=null;
+ const num=v=>{v=(v||"").trim();return v===""||/^nan$/i.test(v)?NaN:parseFloat(v)};
+ $("rgo").onclick=async()=>{try{const mf=$("rm").files[0],cf=$("rc").files[0];if(!mf||!cf){$("rmsg").textContent="Choose a model file and a CSV first.";return}
+  const mdl=parseModel(JSON.parse(await mf.text()));if(!mdl.names.length)throw new Error("Model has no feature names. Train on a pandas DataFrame, then save with save_model('model.json').");
+  let t=await cf.slice(0,5e6).text();if(cf.size>5e6)t=t.slice(0,t.lastIndexOf("\n"));
+  const L=t.split(/\r?\n/).filter(Boolean),cols=L[0].split(",").map(c=>c.trim()),rows=L.slice(1).map(l=>l.split(","));
+  const idx=mdl.names.map(n=>cols.indexOf(n)),miss=mdl.names.filter((n,i)=>idx[i]<0);if(miss.length)throw new Error("CSV is missing columns: "+miss.slice(0,5).join(", "));
+  const ip=cols.findIndex(c=>/^(src|source)[ _]?ip$/i.test(c));let k=0;clearInterval(timer);
+  timer=setInterval(()=>{if(k>=rows.length){clearInterval(timer);$("rmsg").textContent="Replay finished.";return}
+   const r=rows[k],x=idx.map(i=>num(r[i])),t0=performance.now(),p=predict(mdl,x),lat=performance.now()-t0,src=ip>=0?r[ip].trim():"flow-"+(k+1);
+   F.push(F.ref(db,"detections"),{ts:F.serverTimestamp(),src_ip:src,prob:p,label:p>=0.5?"attack":"benign",action:blocked.has(src)?"blocked_simulated":"none",latency_ms:lat,source:"web-replay"}).catch(e=>{clearInterval(timer);$("rmsg").textContent="Write rejected: "+e.code});
+   k++;$("rmsg").textContent=`Replaying row ${k} of ${rows.length}`},1000/Math.max(0.2,Math.min(10,+$("rr").value||2)));
+ }catch(e){$("rmsg").textContent=e.message}};
+ $("rst").onclick=()=>{clearInterval(timer);$("rmsg").textContent="Stopped."};
 }
 </script></body></html>
