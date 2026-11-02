@@ -33,8 +33,8 @@ button:focus-visible,input:focus-visible,tr:focus-visible{outline:2px solid var(
 </main>
 <script type="module">
 // ---- 1. PASTE YOUR FIREBASE WEB CONFIG (Project settings > General > Your apps) ----
-const cfg={apiKey:"",authDomain:"",databaseURL:"",projectId:"",appId:""};
-const live=!!cfg.databaseURL, $=id=>document.getElementById(id);
+const cfg={apiKey:"",authDomain:"sdn-project-94cd0.firebaseapp.com",databaseURL:"https://sdn-project-94cd0-default-rtdb.firebaseio.com",projectId:"sdn-project-94cd0",appId:""}; // fill apiKey and appId
+const live=!!(cfg.databaseURL&&cfg.apiKey&&cfg.appId), $=id=>document.getElementById(id);
 let items=[],sel=null,db,auth,fs,user;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function render(){
