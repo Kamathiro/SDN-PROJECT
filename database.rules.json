@@ -1,0 +1,22 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "detections": { ".read": "auth != null && root.child('admins').child(auth.uid).exists()" },
+    "status":     { ".read": "auth != null && root.child('admins').child(auth.uid).exists()" },
+    "commands": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      "$id": {
+        ".write": "auth != null && root.child('admins').child(auth.uid).exists() && !data.exists()",
+        ".validate": "newData.hasChildren(['action','src_ip','by','ts','done'])",
+        "action": { ".validate": "newData.val() == 'block' || newData.val() == 'unblock'" },
+        "src_ip": { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{1,3}(\\.[0-9]{1,3}){3}$/)" },
+        "by":     { ".validate": "newData.isString()" },
+        "ts":     { ".validate": "newData.isNumber()" },
+        "done":   { ".validate": "newData.val() == false" },
+        "$other": { ".validate": false }
+      }
+    },
+    "admins": { "$uid": { ".read": "auth != null && auth.uid == $uid" } }
+  }
+}

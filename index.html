@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SDN DDoS Detection Console</title>
+<style>
+:root{--bg:#f3f5f7;--panel:#fff;--ink:#14212b;--mute:#5d6b76;--line:#d5dce2;--ok:#1f7a5a;--bad:#b3261e;--warn:#a86400;--acc:#0b5cab}
+@media(prefers-color-scheme:dark){:root{--bg:#0e161c;--panel:#16212a;--ink:#e6edf2;--mute:#8fa1ae;--line:#26343f;--ok:#4cc39b;--bad:#ff6b61;--warn:#e8a63a;--acc:#6db3f2}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap;gap:8px}
+h1{font-size:18px;margin:0}main{padding:20px;max-width:1200px;margin:auto}
+.banner{padding:8px 14px;border-radius:4px;font-size:13px;margin-bottom:16px;background:color-mix(in srgb,var(--warn) 18%,transparent);border:1px solid var(--warn)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.k{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px}.k b{display:block;font-size:26px}.k span{color:var(--mute);font-size:13px}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}@media(max-width:850px){.grid{grid-template-columns:1fr}}
+.p{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0}.p h2{font-size:15px;margin:0 0 10px}
+.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr[data-i]{cursor:pointer}tr[data-i]:hover,tr.sel{background:color-mix(in srgb,var(--acc) 10%,transparent)}
+.attack{color:var(--bad);font-weight:600}.benign{color:var(--ok)}
+button,input{font:inherit;padding:7px 12px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+button{cursor:pointer;background:var(--acc);color:#fff;border:0}button.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:focus-visible,input:focus-visible,tr:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.bar{height:10px;background:var(--acc);border-radius:2px}.neg{background:var(--bad)}.row{display:grid;grid-template-columns:130px 1fr 54px;gap:8px;align-items:center;font-size:13px;margin:6px 0}
+#login{max-width:340px;margin:12vh auto;display:grid;gap:10px}.mute{color:var(--mute);font-size:13px}svg{width:100%;height:80px}
+</style></head><body>
+<header><h1>SDN DDoS Detection Console</h1><div><span class="mute" id="mode"></span> <button class="alt" id="out" hidden>Sign out</button></div></header>
+<div id="login" hidden><h2>Sign in</h2><input id="em" type="email" placeholder="Email" autocomplete="username"><input id="pw" type="password" placeholder="Password" autocomplete="current-password"><button id="go">Sign in</button><div class="mute" id="err" role="alert"></div></div>
+<main id="app" hidden>
+<div class="banner" id="demo" hidden>Demo mode: records below are synthetic and are not experimental results. Add your Firebase config to show live data.</div>
+<div class="kpis"><div class="k"><b id="k1">0</b><span>Flows scored (this session)</span></div><div class="k"><b id="k2">0</b><span>Flagged as attack</span></div><div class="k"><b id="k3">0</b><span>Mitigated</span></div><div class="k"><b id="k4">–</b><span>Mean decision latency (ms)</span></div></div>
+<div class="grid"><div class="p"><h2>Attack probability, last 60 flows</h2><svg id="spark" viewBox="0 0 600 80" preserveAspectRatio="none" role="img" aria-label="Attack probability trend"></svg>
+<h2 style="margin-top:14px">Detections</h2><div class="scroll"><table><thead><tr><th>Time</th><th>Source IP</th><th>Label</th><th>P(attack)</th><th>Action</th><th>Latency</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+<div class="p"><h2>Why this flow? (SHAP)</h2><div id="shap" class="mute">Select a detection.</div><h2 style="margin-top:18px">Manual mitigation</h2><div class="mute" id="sel">No flow selected.</div><p><button id="blk" disabled>Block source</button> <button class="alt" id="unb" disabled>Unblock</button></p><div class="mute" id="msg"></div></div></div>
+</main>
+<script type="module">
+// ---- 1. PASTE YOUR FIREBASE WEB CONFIG (Project settings > General > Your apps) ----
+const cfg={apiKey:"",authDomain:"",databaseURL:"",projectId:"",appId:""};
+const live=!!cfg.databaseURL, $=id=>document.getElementById(id);
+let items=[],sel=null,db,auth,fs,user;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function render(){
+ const a=items.filter(x=>x.label==="attack"),lat=items.map(x=>x.latency_ms).filter(Number.isFinite);
+ $("k1").textContent=items.length;$("k2").textContent=a.length;$("k3").textContent=items.filter(x=>x.action&&x.action!=="none").length;
+ $("k4").textContent=lat.length?(lat.reduce((s,v)=>s+v,0)/lat.length).toFixed(1):"–";
+ $("rows").innerHTML=items.slice(0,50).map((x,i)=>`<tr data-i="${i}" tabindex="0" class="${sel===x?'sel':''}"><td>${esc(x.time)}</td><td>${esc(x.src_ip)}</td><td class="${x.label}">${esc(x.label)}</td><td>${(+x.prob).toFixed(3)}</td><td>${esc(x.action||"none")}</td><td>${Number.isFinite(x.latency_ms)?x.latency_ms.toFixed(0)+" ms":"–"}</td></tr>`).join("");
+ const pts=items.slice(0,60).reverse().map((x,i,a)=>`${(i/Math.max(a.length-1,1))*600},${78-x.prob*74}`).join(" ");
+ $("spark").innerHTML=`<polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="2"/><line x1="0" x2="600" y1="39" y2="39" stroke="var(--line)" stroke-dasharray="4"/>`;
+}
+function pick(x){sel=x;$("sel").textContent=`${x.src_ip} (${x.label}, P=${(+x.prob).toFixed(3)})`;$("blk").disabled=$("unb").disabled=false;
+ const e=Object.entries(x.shap||{}).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,5),m=Math.max(...e.map(v=>Math.abs(v[1])),1e-9);
+ $("shap").innerHTML=e.length?e.map(([k,v])=>`<div class="row"><span>${esc(k)}</span><div class="bar ${v<0?'neg':''}" style="width:${Math.abs(v)/m*100}%"></div><span>${v.toFixed(2)}</span></div>`).join("")+'<div class="mute">Blue pushes toward attack; red toward benign.</div>':"No SHAP values stored for this flow.";render();}
+$("rows").addEventListener("click",e=>{const r=e.target.closest("tr[data-i]");if(r)pick(items[+r.dataset.i])});
+$("rows").addEventListener("keydown",e=>{if(e.key==="Enter"){const r=e.target.closest("tr[data-i]");if(r)pick(items[+r.dataset.i])}});
+async function cmd(action){
+ if(!sel)return;$("msg").textContent="Sending...";
+ if(!live){$("msg").textContent="Demo mode: command not sent.";return}
+ try{await fs.push(fs.ref(db,"commands"),{action,src_ip:sel.src_ip,by:user.email,ts:fs.serverTimestamp(),done:false})}catch(e){$("msg").textContent="Rejected: "+e.code;return}
+ $("msg").textContent=`${action} request queued for ${sel.src_ip}. The controller applies it and marks it done.`;}
+$("blk").onclick=()=>cmd("block");$("unb").onclick=()=>cmd("unblock");
+function show(){$("login").hidden=true;$("app").hidden=false;$("out").hidden=!live}
+if(!live){ // synthetic demo data, clearly labelled
+ $("demo").hidden=false;$("mode").textContent="demo";show();
+ const f=["flow_pkts_per_s","syn_flag_cnt","fwd_pkt_len_mean","flow_iat_std","bwd_pkts_per_s"];
+ setInterval(()=>{const at=Math.random()<.35,p=at?.75+Math.random()*.25:Math.random()*.3;
+  items.unshift({time:new Date().toLocaleTimeString(),src_ip:"10.0.0."+(1+Math.floor(Math.random()*40)),label:at?"attack":"benign",prob:p,action:at?"blocked":"none",latency_ms:20+Math.random()*30,shap:Object.fromEntries(f.map(k=>[k,(Math.random()-.4)*(at?1:-1)]))});
+  items=items.slice(0,200);render()},1500);
+}else{
+ const[A,Au,F]=await Promise.all(["app","auth","database"].map(m=>import(`https://www.gstatic.com/firebasejs/10.12.2/firebase-${m}.js`)));
+ fs=F;db=F.getDatabase(A.initializeApp(cfg));auth=Au.getAuth();
+ $("go").onclick=()=>Au.signInWithEmailAndPassword(auth,$("em").value,$("pw").value).catch(e=>$("err").textContent="Sign-in failed: "+e.code);
+ $("out").onclick=()=>Au.signOut(auth);
+ let offs=[];
+ Au.onAuthStateChanged(auth,u=>{user=u;offs.forEach(f=>f());offs=[];
+  if(!u){$("app").hidden=true;$("login").hidden=false;return}
+  show();$("mode").textContent="live";
+  offs.push(F.onValue(F.ref(db,"status/current"),s=>{const v=s.val();if(v)$("mode").textContent=`live · ${v.mode} · model ${v.model_version}${v.adwin_drift?" · drift detected":""}`}));
+  offs.push(F.onValue(F.query(F.ref(db,"detections"),F.orderByKey(),F.limitToLast(200)),s=>{
+   const a=[];s.forEach(c=>{const x=c.val();x.time=x.ts?new Date(x.ts).toLocaleTimeString():"";a.push(x)});items=a.reverse();render()},
+   e=>{$("app").prepend(Object.assign(document.createElement("div"),{className:"banner",textContent:"Read denied. Add your UID under admins/. "+e.code}))}));});
+}
+</script></body></html>
